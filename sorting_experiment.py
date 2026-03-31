@@ -3,6 +3,7 @@ import random
 import sys
 import csv
 import string
+import multiprocessing  # necesar pentru a putea opri procesele care dureaza prea mult
 
 # ca sa nu opreasca executia pentru prea multe elemente Python
 sys.setrecursionlimit(2000000)
@@ -12,7 +13,6 @@ class Node:
     def __init__(self, data):
         self.data = data
         self.next = None
-
 
 # ia o lista clasica, o parcurge si creaza noduri, return head
 def array_to_ll(arr):
@@ -104,7 +104,7 @@ def merge_sort(arr):
 
 
 # quick pt array normal
-# alege pivot aleatoriu, le separa,
+# alege pivot aleatoriu, le separa
 def quick_sort(arr):
     if len(arr) <= 1:
         return arr
@@ -125,22 +125,28 @@ def get_data(n, case, data_type, str_len):
         # cuvinte aleatorii de str_len litere
         raw_data = [''.join(random.choices(string.ascii_lowercase, k=str_len)) for _ in range(n)]
 
-    if case == "Random": #perform. medie
+    if case == "Random":  # perform. medie
         return raw_data
     if case == "Sorted":
         return sorted(raw_data)
-    if case == "Reverse": #cel mai rau pt bubble si selection
+    if case == "Reverse":  # cel mai rau pt bubble si selection
         return sorted(raw_data, reverse=True)
-    if case == "Flat": #bun pt eficienta pivoti in Quick Sort
+    if case == "Flat":  # bun pt eficienta pivoti in Quick Sort
         subset = raw_data[:7]
         return [random.choice(subset) for _ in range(n)]
-    if case == "Almost": #evidentiaza eficienta insertion sort
+    if case == "Almost":  # evidentiaza eficienta insertion sort
         d = sorted(raw_data)
         for _ in range(int(n * 0.02)):
             i, j = random.randint(0, n - 1), random.randint(0, n - 1)
             d[i], d[j] = d[j], d[i]
         return d
     return []
+
+
+# Functie auxiliara pentru a rula Merge_LL in proces separat
+def run_merge_ll(data):
+    head = array_to_ll(data)
+    merge_ll(head)
 
 
 def main():
@@ -160,7 +166,7 @@ def main():
         ("Insertion", insertion_sort),
         ("Merge", merge_sort),
         ("Quick", quick_sort)
-    ]  #lista tuples, pot fi apelate in loop-uri pt ca in python sunt ca obiectele
+    ]  # lista tuples, pot fi apelate in loop-uri pt ca in python sunt ca obiectele
 
     # lista in care colectam datele pentru CSV
     results_list = []
@@ -173,30 +179,47 @@ def main():
         for case in cases:
             data = get_data(n, case, dtype, str_len)
             for name, func in algos:
-                if n > 100000 and name in ["Bubble", "Selection", "Insertion"]: #pt alg astia se sare daca e introdus o lista m mare de 100.000
-                    print(f"{name:<15} | {dtype:<8} | {case:<10} | SKIPPED")
-                    results_list.append([name, dtype, case, "SKIPPED"])
-                    continue
+                #ne bazam doar pe timeout-ul de 10 secunde de mai jos
+                current_copy = list(data)  # facem o copie a listei originale, fiecare alg primeste lista originala
 
-                current_copy = list(data) #facem o copie a listei originale, fiecare alg primeste lista originala
+                start_ns = time.perf_counter_ns()  # cel mai precis in python, mai precis decat .time()
 
-                start_ns = time.perf_counter_ns() #cel mai precis in python, mai precis decat .time()
-                if name == "Quick": #pt ca quick sort e out-of-place, foloseste list comprehension
-                    quick_sort(current_copy)
+                # cream procesul separat pentru sortare
+                p = multiprocessing.Process(target=func, args=(current_copy,))
+                p.start()
+
+                # Asteptam 10 secunde
+                p.join(timeout=10)
+
+                if p.is_alive():
+                    # daca dureaza mai mult de 10 secunde, dam skip
+                    p.terminate()
+                    p.join()
+                    print(f"{name:<15} | {dtype:<8} | {case:<10} | TIMEOUT (>10s)")
+                    results_list.append([name, dtype, case, "TIMEOUT"])
                 else:
-                    func(current_copy)  #pt restul alg care sunt in-place
-                duration_ns = time.perf_counter_ns() - start_ns
-
-                print(f"{name:<15} | {dtype:<8} | {case:<10} | {duration_ns:,} ns")
-                results_list.append([name, dtype, case, duration_ns])
+                    duration_ns = time.perf_counter_ns() - start_ns
+                    print(f"{name:<15} | {dtype:<8} | {case:<10} | {duration_ns:,} ns")
+                    results_list.append([name, dtype, case, duration_ns])
 
             # test linked list, merge
-            start_ll_ns = time.perf_counter_ns() #inregistrare durata in ns, inainte de incepere
-            head = array_to_ll(data)
-            merge_ll(head)
-            duration_ll_ns = time.perf_counter_ns() - start_ll_ns #se calc. timpul total
-            print(f"{'Merge_LL':<15} | {dtype:<8} | {case:<10} | {duration_ll_ns:,} ns")
-            results_list.append(["Merge_LL", dtype, case, duration_ll_ns])
+            start_ll_ns = time.perf_counter_ns()  # inregistrare durata in ns, inainte de incepere
+
+            # rulam Merge_LL in proces separat cu timeout
+            p_ll = multiprocessing.Process(target=run_merge_ll, args=(data,))
+            p_ll.start()
+            p_ll.join(timeout=10)
+
+            if p_ll.is_alive():
+                p_ll.terminate()
+                p_ll.join()
+                print(f"{'Merge_LL':<15} | {dtype:<8} | {case:<10} | TIMEOUT (>10s)")
+                results_list.append(["Merge_LL", dtype, case, "TIMEOUT"])
+            else:
+                duration_ll_ns = time.perf_counter_ns() - start_ns  # se calc. timpul total
+                print(f"{'Merge_LL':<15} | {dtype:<8} | {case:<10} | {duration_ll_ns:,} ns")
+                results_list.append(["Merge_LL", dtype, case, duration_ll_ns])
+
             print("-" * 65)
 
     # scrie in fisier csv
@@ -210,4 +233,6 @@ def main():
 
 
 if __name__ == "__main__":
+    # necesar in Windows pentru multiprocessing
+    multiprocessing.freeze_support()
     main()
