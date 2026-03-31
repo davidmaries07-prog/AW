@@ -114,28 +114,27 @@ def quick_sort(arr):
         quick_sort([x for x in arr if x > p])
 
 
-# generare liste - Modificată pentru a suporta tipuri de date
-def get_data(n, case, data_type):
-    # Generăm baza de date în funcție de tip
+# generare liste
+def get_data(n, case, data_type, str_len):
+    # generare baza de date in funcție de tip
     if data_type == "int":
         raw_data = [random.randint(0, 1000000) for _ in range(n)]
     elif data_type == "float":
         raw_data = [random.uniform(0.0, 1000000.0) for _ in range(n)]
     elif data_type == "string":
-        # Generează cuvinte aleatorii de 5 litere
-        raw_data = [''.join(random.choices(string.ascii_lowercase, k=5)) for _ in range(n)]
+        # cuvinte aleatorii de str_len litere
+        raw_data = [''.join(random.choices(string.ascii_lowercase, k=str_len)) for _ in range(n)]
 
-    if case == "Random":
+    if case == "Random": #perform. medie
         return raw_data
     if case == "Sorted":
         return sorted(raw_data)
-    if case == "Reverse":
+    if case == "Reverse": #cel mai rau pt bubble si selection
         return sorted(raw_data, reverse=True)
-    if case == "Flat":
-        # Luăm doar primele 5 elemente unice pentru a simula distribuția plată
-        subset = raw_data[:5]
+    if case == "Flat": #bun pt eficienta pivoti in Quick Sort
+        subset = raw_data[:7]
         return [random.choice(subset) for _ in range(n)]
-    if case == "Almost":
+    if case == "Almost": #evidentiaza eficienta insertion sort
         d = sorted(raw_data)
         for _ in range(int(n * 0.02)):
             i, j = random.randint(0, n - 1), random.randint(0, n - 1)
@@ -148,10 +147,11 @@ def main():
     try:
         user_input = input("Enter N: ")
         n = int(user_input)
+        str_len_input = input("Enter String Length: ")
+        str_len = int(str_len_input)
     except ValueError:
         return
 
-    # Am adăugat tipurile de date aici
     data_types = ["int", "float", "string"]
     cases = ["Random", "Sorted", "Reverse", "Almost", "Flat"]
     algos = [
@@ -160,46 +160,47 @@ def main():
         ("Insertion", insertion_sort),
         ("Merge", merge_sort),
         ("Quick", quick_sort)
-    ]
+    ]  #lista tuples, pot fi apelate in loop-uri pt ca in python sunt ca obiectele
 
+    # lista in care colectam datele pentru CSV
     results_list = []
 
-    print(f"\nResults for N = {n}")
+    print(f"\nResults for N = {n}, String Length = {str_len}")
     print(f"{'Algorithm':<15} | {'Type':<8} | {'Case':<10} | {'Time (ns)':<15}")
     print("-" * 65)
 
     for dtype in data_types:
         for case in cases:
-            data = get_data(n, case, dtype)
+            data = get_data(n, case, dtype, str_len)
             for name, func in algos:
-                if n > 10000 and name in ["Bubble", "Selection", "Insertion"]:
+                if n > 100000 and name in ["Bubble", "Selection", "Insertion"]: #pt alg astia se sare daca e introdus o lista m mare de 100.000
                     print(f"{name:<15} | {dtype:<8} | {case:<10} | SKIPPED")
                     results_list.append([name, dtype, case, "SKIPPED"])
                     continue
 
-                current_copy = list(data)
+                current_copy = list(data) #facem o copie a listei originale, fiecare alg primeste lista originala
 
-                start_ns = time.perf_counter_ns()
-                if name == "Quick":
+                start_ns = time.perf_counter_ns() #cel mai precis in python, mai precis decat .time()
+                if name == "Quick": #pt ca quick sort e out-of-place, foloseste list comprehension
                     quick_sort(current_copy)
                 else:
-                    func(current_copy)
+                    func(current_copy)  #pt restul alg care sunt in-place
                 duration_ns = time.perf_counter_ns() - start_ns
 
                 print(f"{name:<15} | {dtype:<8} | {case:<10} | {duration_ns:,} ns")
                 results_list.append([name, dtype, case, duration_ns])
 
             # test linked list, merge
-            start_ll_ns = time.perf_counter_ns()
+            start_ll_ns = time.perf_counter_ns() #inregistrare durata in ns, inainte de incepere
             head = array_to_ll(data)
             merge_ll(head)
-            duration_ll_ns = time.perf_counter_ns() - start_ll_ns
+            duration_ll_ns = time.perf_counter_ns() - start_ll_ns #se calc. timpul total
             print(f"{'Merge_LL':<15} | {dtype:<8} | {case:<10} | {duration_ll_ns:,} ns")
             results_list.append(["Merge_LL", dtype, case, duration_ll_ns])
             print("-" * 65)
 
     # scrie in fisier csv
-    filename = f"rezultate_{n}.csv"
+    filename = f"rezultate_n{n}_sl{str_len}.csv"
     with open(filename, mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(["Algorithm", "Data Type", "Case", "Time (ns)"])
