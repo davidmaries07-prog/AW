@@ -143,7 +143,7 @@ def get_data(n, case, data_type, str_len):
     return []
 
 
-# Functie auxiliara pentru a rula Merge_LL in proces separat
+# functie auxiliara pentru a rula Merge_LL in proces separat
 def run_merge_ll(data):
     head = array_to_ll(data)
     merge_ll(head)
@@ -179,23 +179,23 @@ def main():
         for case in cases:
             data = get_data(n, case, dtype, str_len)
             for name, func in algos:
-                #ne bazam doar pe timeout-ul de 10 secunde de mai jos
-                current_copy = list(data)  # facem o copie a listei originale, fiecare alg primeste lista originala
+                #ne bazam doar pe timeout-ul de 5 secunde de mai jos
+                current_copy = list(data)  # copie a listei originale, fiecare alg primeste lista originala
 
-                start_ns = time.perf_counter_ns()  # cel mai precis in python, mai precis decat .time()
+                start_ns = time.perf_counter_ns()  # mai precis in python, mai precis decat .time()
 
                 # cream procesul separat pentru sortare
                 p = multiprocessing.Process(target=func, args=(current_copy,))
                 p.start()
 
-                # Asteptam 10 secunde
-                p.join(timeout=10)
+                # Asteptam 5 secunde
+                p.join(timeout=5)
 
                 if p.is_alive():
-                    # daca dureaza mai mult de 10 secunde, dam skip
+                    # daca dureaza mai mult de 5 secunde, dam skip
                     p.terminate()
                     p.join()
-                    print(f"{name:<15} | {dtype:<8} | {case:<10} | TIMEOUT (>10s)")
+                    print(f"{name:<15} | {dtype:<8} | {case:<10} | TIMEOUT (>5s)")
                     results_list.append([name, dtype, case, "TIMEOUT"])
                 else:
                     duration_ns = time.perf_counter_ns() - start_ns
@@ -208,12 +208,12 @@ def main():
             # rulam Merge_LL in proces separat cu timeout
             p_ll = multiprocessing.Process(target=run_merge_ll, args=(data,))
             p_ll.start()
-            p_ll.join(timeout=10)
+            p_ll.join(timeout=5)
 
             if p_ll.is_alive():
                 p_ll.terminate()
                 p_ll.join()
-                print(f"{'Merge_LL':<15} | {dtype:<8} | {case:<10} | TIMEOUT (>10s)")
+                print(f"{'Merge_LL':<15} | {dtype:<8} | {case:<10} | TIMEOUT (>5s)")
                 results_list.append(["Merge_LL", dtype, case, "TIMEOUT"])
             else:
                 duration_ll_ns = time.perf_counter_ns() - start_ns  # se calc. timpul total
