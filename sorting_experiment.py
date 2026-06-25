@@ -1,0 +1,232 @@
+import time
+import random
+import sys
+import csv
+import string
+import multiprocessing
+
+sys.setrecursionlimit(2000000)
+
+
+class Node:
+    def __init__(self, data):
+        self.data = data
+        self.next = None
+
+
+def array_to_ll(arr):
+    if not arr: return None
+    head = Node(arr[0])
+    curr = head
+    for v in arr[1:]:
+        curr.next = Node(v)
+        curr = curr.next
+    return head
+
+
+def merge_ll(head):
+    if not head or not head.next:
+        return head
+
+    slow, fast = head, head.next
+    while fast and fast.next:
+        slow = slow.next
+        fast = fast.next.next
+
+    mid = slow.next
+    slow.next = None
+
+    l, r = merge_ll(head), merge_ll(mid)
+
+    dummy = Node(0)
+    curr = dummy
+    while l and r:
+        if l.data < r.data:
+            curr.next, l = l, l.next
+        else:
+            curr.next, r = r, r.next
+        curr = curr.next
+    curr.next = l or r
+    return dummy.next
+
+
+def bubble_sort(arr):
+    n = len(arr)
+    for i in range(n):
+        for j in range(0, n - i - 1):
+            if arr[j] > arr[j + 1]:
+                arr[j], arr[j + 1] = arr[j + 1], arr[j]
+
+
+def selection_sort(arr):
+    for i in range(len(arr)):
+        m = i
+        for j in range(i + 1, len(arr)):
+            if arr[j] < arr[m]:
+                m = j
+        arr[i], arr[m] = arr[m], arr[i]
+
+
+def insertion_sort(arr):
+    for i in range(1, len(arr)):
+        k, j = arr[i], i - 1
+        while j >= 0 and k < arr[j]:
+            arr[j + 1] = arr[j]
+            j -= 1
+        arr[j + 1] = k
+
+
+def merge_sort(arr):
+    if len(arr) > 1:
+        mid = len(arr) // 2
+        L, R = arr[:mid], arr[mid:]
+        merge_sort(L)
+        merge_sort(R)
+        i = j = k = 0
+        while i < len(L) and j < len(R):
+            if L[i] < R[j]:
+                arr[k] = L[i]
+                i += 1
+            else:
+                arr[k] = R[j]
+                j += 1
+            k += 1
+        arr[k:] = L[i:] if i < len(L) else R[j:]
+
+
+def quick_sort(arr):
+    if len(arr) <= 1:
+        return arr
+    p = arr[random.randint(0, len(arr) - 1)]
+    return quick_sort([x for x in arr if x < p]) + \
+        [x for x in arr if x == p] + \
+        quick_sort([x for x in arr if x > p])
+
+
+def get_data(n, case, data_type, str_len):
+    if data_type == "int":
+        raw_data = [random.randint(0, 1000000) for _ in range(n)]
+    elif data_type == "float":
+        raw_data = [random.uniform(0.0, 1000000.0) for _ in range(n)]
+    elif data_type == "string":
+        raw_data = [''.join(random.choices(string.ascii_lowercase, k=str_len)) for _ in range(n)]
+
+    if case == "Random":
+        return raw_data
+    if case == "Sorted":
+        return sorted(raw_data)
+    if case == "Reverse":
+        return sorted(raw_data, reverse=True)
+    if case == "Flat":
+        subset = raw_data[:7]
+        return [random.choice(subset) for _ in range(n)]
+    if case == "Almost":
+        d = sorted(raw_data)
+        for _ in range(int(n * 0.02)):
+            i, j = random.randint(0, n - 1), random.randint(0, n - 1)
+            d[i], d[j] = d[j], d[i]
+        return d
+    return []
+
+
+def time_algorithm(algo, data, queue):
+    start = time.perf_counter_ns()
+    algo(data)
+    end = time.perf_counter_ns()
+    queue.put(end - start)
+
+
+def time_merge_ll(data, queue):
+    head = array_to_ll(data)
+
+    start = time.perf_counter_ns()
+    merge_ll(head)
+    end = time.perf_counter_ns()
+
+    queue.put(end - start)
+
+
+def main():
+    try:
+        user_input = input("Enter N: ")
+        n = int(user_input)
+        str_len_input = input("Enter String Length: ")
+        str_len = int(str_len_input)
+    except ValueError:
+        return
+
+    data_types = ["int", "float", "string"]
+    cases = ["Random", "Sorted", "Reverse", "Almost", "Flat"]
+    algos = [
+        ("Bubble", bubble_sort),
+        ("Selection", selection_sort),
+        ("Insertion", insertion_sort),
+        ("Merge", merge_sort),
+        ("Quick", quick_sort)
+    ]
+
+    results_list = []
+
+    print(f"\nResults for N = {n}, String Length = {str_len}")
+    print(f"{'Algorithm':<15} | {'Type':<8} | {'Case':<10} | {'Time (ns)':<15}")
+    print("-" * 65)
+
+    for dtype in data_types:
+        for case in cases:
+            data = get_data(n, case, dtype, str_len)
+
+            for name, func in algos:
+                current_copy = list(data)
+
+                q = multiprocessing.Queue()
+                p = multiprocessing.Process(target=time_algorithm, args=(func, current_copy, q))
+
+                p.start()
+                p.join(timeout=5)
+
+                if p.is_alive():
+                    p.terminate()
+                    p.join()
+                    print(f"{name:<15} | {dtype:<8} | {case:<10} | TIMEOUT (>5s)")
+                    results_list.append([name, dtype, case, "TIMEOUT"])
+                else:
+                    if not q.empty():
+                        duration_ns = q.get()
+                        print(f"{name:<15} | {dtype:<8} | {case:<10} | {duration_ns:,} ns")
+                        results_list.append([name, dtype, case, duration_ns])
+                    else:
+                        print(f"{name:<15} | {dtype:<8} | {case:<10} | ERROR")
+
+            q_ll = multiprocessing.Queue()
+            p_ll = multiprocessing.Process(target=time_merge_ll, args=(data, q_ll))
+
+            p_ll.start()
+            p_ll.join(timeout=5)
+
+            if p_ll.is_alive():
+                p_ll.terminate()
+                p_ll.join()
+                print(f"{'Merge_LL':<15} | {dtype:<8} | {case:<10} | TIMEOUT (>5s)")
+                results_list.append(["Merge_LL", dtype, case, "TIMEOUT"])
+            else:
+                if not q_ll.empty():
+                    duration_ll_ns = q_ll.get()
+                    print(f"{'Merge_LL':<15} | {dtype:<8} | {case:<10} | {duration_ll_ns:,} ns")
+                    results_list.append(["Merge_LL", dtype, case, duration_ll_ns])
+                else:
+                    print(f"{'Merge_LL':<15} | {dtype:<8} | {case:<10} | ERROR")
+
+            print("-" * 65)
+
+    filename = f"rezultate_n{n}_sl{str_len}.csv"
+    with open(filename, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["Algorithm", "Data Type", "Case", "Time (ns)"])
+        writer.writerows(results_list)
+
+    print(f"\nFinal results saved to: {filename}")
+
+
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
+    main()
